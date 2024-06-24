@@ -102,6 +102,7 @@ class Attention(nn.Module):
         cross_attention_norm: Optional[str] = None,
         cross_attention_norm_num_groups: int = 32,
         qk_norm: Optional[str] = None,
+        qk_cross_norm: Optional[str] = None,
         added_kv_proj_dim: Optional[int] = None,
         norm_num_groups: Optional[int] = None,
         spatial_norm_dim: Optional[int] = None,
@@ -168,8 +169,25 @@ class Attention(nn.Module):
         elif qk_norm == "layer_norm":
             self.norm_q = nn.LayerNorm(dim_head, eps=eps)
             self.norm_k = nn.LayerNorm(dim_head, eps=eps)
+        elif qk_norm == "rms_norm":
+            from .normalization import RMSNorm
+            self.norm_q = RMSNorm(dim_head, eps=eps)
+            self.norm_k = RMSNorm(dim_head, eps=eps)
         else:
-            raise ValueError(f"unknown qk_norm: {qk_norm}. Should be None or 'layer_norm'")
+            raise ValueError(f"unknown qk_norm: {qk_norm}. Should be None, 'layer_norm' or 'rms_norm'")
+        
+        if qk_cross_norm is None:
+            self.norm_cross_q = None
+            self.norm_cross_k = None
+        elif qk_cross_norm == "layer_norm":
+            self.norm_cross_q = nn.LayerNorm(dim_head, eps=eps)
+            self.norm_cross_k = nn.LayerNorm(dim_head, eps=eps)
+        elif qk_cross_norm == "rms_norm":
+            from .normalization import RMSNorm
+            self.norm_cross_q = RMSNorm(dim_head, eps=eps)
+            self.norm_cross_k = RMSNorm(dim_head, eps=eps)
+        else:
+            raise ValueError(f"unknown qk_cross_norm: {qk_cross_norm}. Should be None, 'layer_norm' or 'rms_norm'")
 
         if cross_attention_norm is None:
             self.norm_cross = None
@@ -1010,11 +1028,19 @@ class JointAttnProcessor2_0:
         query = attn.to_q(hidden_states)
         key = attn.to_k(hidden_states)
         value = attn.to_v(hidden_states)
+        if attn.norm_q is not None:
+            query = attn.norm_q(query)
+        if attn.norm_k is not None:
+            key = attn.norm_k(key)
 
         # `context` projections.
         encoder_hidden_states_query_proj = attn.add_q_proj(encoder_hidden_states)
         encoder_hidden_states_key_proj = attn.add_k_proj(encoder_hidden_states)
         encoder_hidden_states_value_proj = attn.add_v_proj(encoder_hidden_states)
+        if attn.norm_cross_q is not None:
+            encoder_hidden_states_query_proj = attn.norm_cross_q(encoder_hidden_states_query_proj)
+        if attn.norm_cross_k is not None:
+            encoder_hidden_states_key_proj = attn.norm_cross_k(encoder_hidden_states_key_proj)
 
         # attention
         query = torch.cat([query, encoder_hidden_states_query_proj], dim=1)
