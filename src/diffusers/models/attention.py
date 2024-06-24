@@ -100,7 +100,7 @@ class JointTransformerBlock(nn.Module):
             processing of `context` conditions.
     """
 
-    def __init__(self, dim, num_attention_heads, attention_head_dim, context_pre_only=False):
+    def __init__(self, dim, num_attention_heads, attention_head_dim, context_pre_only=False, qk_norm=None, qk_cross_norm=None):
         super().__init__()
 
         self.context_pre_only = context_pre_only
@@ -132,6 +132,8 @@ class JointTransformerBlock(nn.Module):
             heads=num_attention_heads,
             out_dim=dim,
             context_pre_only=context_pre_only,
+            qk_norm=qk_norm,
+            qk_cross_norm=qk_cross_norm,
             bias=True,
             processor=processor,
         )
