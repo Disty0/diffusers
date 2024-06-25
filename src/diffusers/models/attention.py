@@ -133,7 +133,9 @@ class JointTransformerBlock(nn.Module):
             out_dim=dim,
             context_pre_only=context_pre_only,
             qk_norm=qk_norm,
+            qk_norm_dim=dim,
             qk_cross_norm=qk_cross_norm,
+            qk_cross_norm_dim=dim,
             bias=True,
             processor=processor,
         )
