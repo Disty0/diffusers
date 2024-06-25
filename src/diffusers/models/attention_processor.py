@@ -102,7 +102,9 @@ class Attention(nn.Module):
         cross_attention_norm: Optional[str] = None,
         cross_attention_norm_num_groups: int = 32,
         qk_norm: Optional[str] = None,
+        qk_norm_dim: Optional[int] = None,
         qk_cross_norm: Optional[str] = None,
+        qk_cross_norm_dim: Optional[int] = None,
         added_kv_proj_dim: Optional[int] = None,
         norm_num_groups: Optional[int] = None,
         spatial_norm_dim: Optional[int] = None,
@@ -163,29 +165,33 @@ class Attention(nn.Module):
         else:
             self.spatial_norm = None
 
+        if qk_norm_dim is None:
+            qk_norm_dim = dim_head
         if qk_norm is None:
             self.norm_q = None
             self.norm_k = None
         elif qk_norm == "layer_norm":
-            self.norm_q = nn.LayerNorm(dim_head, eps=eps)
-            self.norm_k = nn.LayerNorm(dim_head, eps=eps)
+            self.norm_q = nn.LayerNorm(qk_norm_dim, eps=eps)
+            self.norm_k = nn.LayerNorm(qk_norm_dim, eps=eps)
         elif qk_norm == "rms_norm":
             from .normalization import RMSNorm
-            self.norm_q = RMSNorm(dim_head, eps=eps)
-            self.norm_k = RMSNorm(dim_head, eps=eps)
+            self.norm_q = RMSNorm(qk_norm_dim, eps=eps)
+            self.norm_k = RMSNorm(qk_norm_dim, eps=eps)
         else:
             raise ValueError(f"unknown qk_norm: {qk_norm}. Should be None, 'layer_norm' or 'rms_norm'")
         
+        if qk_cross_norm_dim is None:
+            qk_cross_norm_dim = dim_head
         if qk_cross_norm is None:
             self.norm_cross_q = None
             self.norm_cross_k = None
         elif qk_cross_norm == "layer_norm":
-            self.norm_cross_q = nn.LayerNorm(dim_head, eps=eps)
-            self.norm_cross_k = nn.LayerNorm(dim_head, eps=eps)
+            self.norm_cross_q = nn.LayerNorm(qk_cross_norm_dim, eps=eps)
+            self.norm_cross_k = nn.LayerNorm(qk_cross_norm_dim, eps=eps)
         elif qk_cross_norm == "rms_norm":
             from .normalization import RMSNorm
-            self.norm_cross_q = RMSNorm(dim_head, eps=eps)
-            self.norm_cross_k = RMSNorm(dim_head, eps=eps)
+            self.norm_cross_q = RMSNorm(qk_cross_norm_dim, eps=eps)
+            self.norm_cross_k = RMSNorm(qk_cross_norm_dim, eps=eps)
         else:
             raise ValueError(f"unknown qk_cross_norm: {qk_cross_norm}. Should be None, 'layer_norm' or 'rms_norm'")
 
