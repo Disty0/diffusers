@@ -103,6 +103,9 @@ class Attention(nn.Module):
         cross_attention_norm: Optional[str] = None,
         cross_attention_norm_num_groups: int = 32,
         qk_norm: Optional[str] = None,
+        qk_norm_dim: Optional[int] = None,
+        qk_cross_norm: Optional[str] = None,
+        qk_cross_norm_dim: Optional[int] = None,
         added_kv_proj_dim: Optional[int] = None,
         added_proj_bias: Optional[bool] = True,
         norm_num_groups: Optional[int] = None,
@@ -121,7 +124,7 @@ class Attention(nn.Module):
         super().__init__()
 
         # To prevent circular import.
-        from .normalization import FP32LayerNorm
+        from .normalization import FP32LayerNorm, RMSNorm
 
         self.inner_dim = out_dim if out_dim is not None else dim_head * heads
         self.inner_kv_dim = self.inner_dim if kv_heads is None else dim_head * kv_heads
@@ -169,6 +172,8 @@ class Attention(nn.Module):
         else:
             self.spatial_norm = None
 
+        if qk_norm_dim is None:
+            qk_norm_dim = dim_head
         if qk_norm is None:
             self.norm_q = None
             self.norm_k = None
@@ -182,8 +187,25 @@ class Attention(nn.Module):
             # Lumina applys qk norm across all heads
             self.norm_q = nn.LayerNorm(dim_head * heads, eps=eps)
             self.norm_k = nn.LayerNorm(dim_head * kv_heads, eps=eps)
+        elif qk_norm == "rms_norm":
+            self.norm_q = RMSNorm(qk_norm_dim, eps=eps)
+            self.norm_k = RMSNorm(qk_norm_dim, eps=eps)
         else:
-            raise ValueError(f"unknown qk_norm: {qk_norm}. Should be None or 'layer_norm'")
+            raise ValueError(f"unknown qk_norm: {qk_norm}. Should be None, 'layer_norm' or 'rms_norm'")
+
+        if qk_cross_norm_dim is None:
+            qk_cross_norm_dim = dim_head
+        if qk_cross_norm is None:
+            self.norm_cross_q = None
+            self.norm_cross_k = None
+        elif qk_cross_norm == "layer_norm":
+            self.norm_cross_q = nn.LayerNorm(qk_cross_norm_dim, eps=eps)
+            self.norm_cross_k = nn.LayerNorm(qk_cross_norm_dim, eps=eps)
+        elif qk_cross_norm == "rms_norm":
+            self.norm_cross_q = RMSNorm(qk_cross_norm_dim, eps=eps)
+            self.norm_cross_k = RMSNorm(qk_cross_norm_dim, eps=eps)
+        else:
+            raise ValueError(f"unknown qk_cross_norm: {qk_cross_norm}. Should be None, 'layer_norm' or 'rms_norm'")
 
         if cross_attention_norm is None:
             self.norm_cross = None
@@ -1032,11 +1054,19 @@ class JointAttnProcessor2_0:
         query = attn.to_q(hidden_states)
         key = attn.to_k(hidden_states)
         value = attn.to_v(hidden_states)
+        if attn.norm_q is not None:
+            query = attn.norm_q(query)
+        if attn.norm_k is not None:
+            key = attn.norm_k(key)
 
         # `context` projections.
         encoder_hidden_states_query_proj = attn.add_q_proj(encoder_hidden_states)
         encoder_hidden_states_key_proj = attn.add_k_proj(encoder_hidden_states)
         encoder_hidden_states_value_proj = attn.add_v_proj(encoder_hidden_states)
+        if attn.norm_cross_q is not None:
+            encoder_hidden_states_query_proj = attn.norm_cross_q(encoder_hidden_states_query_proj)
+        if attn.norm_cross_k is not None:
+            encoder_hidden_states_key_proj = attn.norm_cross_k(encoder_hidden_states_key_proj)
 
         # attention
         query = torch.cat([query, encoder_hidden_states_query_proj], dim=1)
