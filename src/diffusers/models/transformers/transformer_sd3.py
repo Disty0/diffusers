@@ -71,6 +71,7 @@ class SD3Transformer2DModel(ModelMixin, ConfigMixin, PeftAdapterMixin, FromOrigi
         pooled_projection_dim: int = 2048,
         out_channels: int = 16,
         pos_embed_max_size: int = 96,
+        qk_norm: str = None,
     ):
         super().__init__()
         default_out_channels = in_channels
@@ -99,6 +100,7 @@ class SD3Transformer2DModel(ModelMixin, ConfigMixin, PeftAdapterMixin, FromOrigi
                     num_attention_heads=self.config.num_attention_heads,
                     attention_head_dim=self.config.attention_head_dim,
                     context_pre_only=i == num_layers - 1,
+                    qk_norm=qk_norm,
                 )
                 for i in range(self.config.num_layers)
             ]

@@ -121,7 +121,7 @@ class Attention(nn.Module):
         super().__init__()
 
         # To prevent circular import.
-        from .normalization import FP32LayerNorm
+        from .normalization import FP32LayerNorm, RMSNorm
 
         self.inner_dim = out_dim if out_dim is not None else dim_head * heads
         self.inner_kv_dim = self.inner_dim if kv_heads is None else dim_head * kv_heads
@@ -182,6 +182,9 @@ class Attention(nn.Module):
             # Lumina applys qk norm across all heads
             self.norm_q = nn.LayerNorm(dim_head * heads, eps=eps)
             self.norm_k = nn.LayerNorm(dim_head * kv_heads, eps=eps)
+        elif qk_norm == "rms_norm_across_heads":
+            self.norm_q = RMSNorm(dim_head * heads, eps=eps)
+            self.norm_k = RMSNorm(dim_head * heads, eps=eps)
         else:
             raise ValueError(f"unknown qk_norm: {qk_norm}. Should be None or 'layer_norm'")
 
@@ -235,6 +238,9 @@ class Attention(nn.Module):
             if qk_norm == "fp32_layer_norm":
                 self.norm_added_q = FP32LayerNorm(dim_head, elementwise_affine=False, bias=False, eps=eps)
                 self.norm_added_k = FP32LayerNorm(dim_head, elementwise_affine=False, bias=False, eps=eps)
+            elif qk_norm == "rms_norm_across_heads":
+                self.norm_added_q = RMSNorm(dim_head * heads, eps=eps)
+                self.norm_added_k = RMSNorm(dim_head * heads, eps=eps)
         else:
             self.norm_added_q = None
             self.norm_added_k = None
@@ -1047,11 +1053,19 @@ class JointAttnProcessor2_0:
         query = attn.to_q(hidden_states)
         key = attn.to_k(hidden_states)
         value = attn.to_v(hidden_states)
+        if attn.norm_q is not None:
+            query = attn.norm_q(query)
+        if attn.norm_k is not None:
+            key = attn.norm_k(key)
 
         # `context` projections.
         encoder_hidden_states_query_proj = attn.add_q_proj(encoder_hidden_states)
         encoder_hidden_states_key_proj = attn.add_k_proj(encoder_hidden_states)
         encoder_hidden_states_value_proj = attn.add_v_proj(encoder_hidden_states)
+        if attn.norm_added_q is not None:
+            encoder_hidden_states_query_proj = attn.norm_added_q(encoder_hidden_states_query_proj)
+        if attn.norm_added_k is not None:
+            encoder_hidden_states_key_proj = attn.norm_added_k(encoder_hidden_states_key_proj)
 
         # attention
         query = torch.cat([query, encoder_hidden_states_query_proj], dim=1)
