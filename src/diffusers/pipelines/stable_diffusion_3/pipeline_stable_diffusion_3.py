@@ -255,7 +255,8 @@ class StableDiffusion3Pipeline(DiffusionPipeline, SD3LoraLoaderMixin, FromSingle
         prompt_embeds = prompt_embeds.repeat(1, num_images_per_prompt, 1)
         prompt_embeds = prompt_embeds.view(batch_size * num_images_per_prompt, seq_len, -1)
 
-        return prompt_embeds
+        attention_mask = text_inputs.attention_mask.to(dtype=dtype, device=device)
+        return prompt_embeds * attention_mask.unsqueeze(-1).expand(prompt_embeds.shape)
 
     def _get_clip_prompt_embeds(
         self,
